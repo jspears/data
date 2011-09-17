@@ -54,11 +54,14 @@ Filters.makeCrazy = function() {
 };
 
 // Connect to a data-store
-graph.connect('couch', { 
-  url: config.couchdb_url,
-  filters: [
-    Filters.makeCrazy()
-  ]
+graph.connect('couch', function(session) {
+  // You may want to consider the session
+  return { 
+    url: config.couchdb_url,
+    filters: [
+      Filters.makeCrazy()
+    ]
+  };
 });
 
 // Serve Data.js backend along with an express server

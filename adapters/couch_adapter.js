@@ -38,8 +38,27 @@ var applyFilters = function(filters, nodes, mode, ctx, callback) {
 
 
 var CouchAdapter = function(graph, config, callback) {
-  var db = CouchClient(config.url);
+
+  var db;
+  var filters;
   var self = {};
+  
+  var initDB = function(ctx) {
+    if (typeof config === "function") {
+      var cnf = config(ctx);
+      db = CouchClient(cnf.url);
+      filters = cnf.filters;
+    } else {
+      if (!db) {
+        db = CouchClient(config.url);
+        filters = config.filters;
+      }
+    }
+    self.db = db; // I don't think that this reference gets updated correctly.
+  };
+  
+  // Initial init
+  // initDB();
   
   // Setup index views for type nodes
   // --------
@@ -89,6 +108,8 @@ var CouchAdapter = function(graph, config, callback) {
   // Flush the database
   
   self.flush = function(callback) {
+    initDB();
+    
     db.request("DELETE", db.uri.pathname, function (err) {
       db.request("PUT", db.uri.pathname, function(err) {
         err ? callback(err) 
@@ -116,6 +137,7 @@ var CouchAdapter = function(graph, config, callback) {
   // Takes a Data.Graph and persists it to CouchDB
   
   self.write = function(graph, callback, ctx) {
+    initDB(ctx);
     var result = {}; // updated graph with new revisions and merged changes
     function writeNode(nodeId, callback) {
       var target = _.extend(graph[nodeId], {
@@ -150,7 +172,7 @@ var CouchAdapter = function(graph, config, callback) {
       });
     }
     
-    applyFilters.call(this, config.filters, graph, 'write', ctx, function(err, filteredNodes) {
+    applyFilters.call(this, filters, graph, 'write', ctx, function(err, filteredNodes) {
       graph = filteredNodes;
       async.forEach(_.keys(graph), writeNode, function(err) {
         err ? callback(err) : callback(null, result);
@@ -165,6 +187,7 @@ var CouchAdapter = function(graph, config, callback) {
   // Given a set of id's and rev's changed nodes are returned
   
   self.pull = function(nodes, callback, ctx) {
+    initDB(ctx);
     var result = {};
     var nodesCopy = _.clone(nodes);
     db.view('type/revisions', {keys: Object.keys(nodes)}, function(err, res) {
@@ -212,6 +235,7 @@ var CouchAdapter = function(graph, config, callback) {
   // Takes a query object and reads all matching nodes
   
   self.read = function(queries, options, callback, ctx) {
+    initDB(ctx);
     // Collects a subgraph that will be returned as a result
     var result = {};
     queries = _.isArray(queries) ? queries : [queries];
@@ -379,14 +403,13 @@ var CouchAdapter = function(graph, config, callback) {
     // Perform queries
     async.forEach(queries, performQuery, function(err) {
       if (err) return callback(err);
-      applyFilters.call(this, config.filters, result, 'read', ctx, function(err, filteredNodes) {
+      applyFilters.call(this, filters, result, 'read', ctx, function(err, filteredNodes) {
         callback(null, filteredNodes);
       });
     });
   };
   
-  
-  self.db = db;
+  // self.db = db;
   
   // Expose Public API
   return self;
